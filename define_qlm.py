@@ -8,6 +8,7 @@ from typing import Any, Optional, Tuple, Callable
 import numpy as np
 
 import torch
+from torch.types import Device
 import torchtext
 
 from model import Quixer
@@ -25,7 +26,7 @@ def epoch_time(start_time: float, end_time: float) -> Tuple[float, float]:
     return elapsed_mins, elapsed_secs
 
 
-def batchify_s2s(data: torch.Tensor, batch_size, bptt, pad_token, device) -> torch.Tensor:
+def batchify_s2s(data: torch.Tensor, batch_size : int, bptt : int, pad_token : int, device : Device) -> torch.Tensor:
     seq_len = (data.size(0) - 1) // batch_size
     batched_data = data[: seq_len * batch_size].view(batch_size, seq_len).T
 
