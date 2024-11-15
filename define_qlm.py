@@ -191,8 +191,8 @@ def train_epoch(
 
 def evaluate(
     model: torch.nn.Module,
-    iterator,
-    loss_function : _Loss,
+    iterator: torch.Tensor,
+    loss_function: _Loss,
     window_size: int,
     pad_token: int,
     device: Device,
