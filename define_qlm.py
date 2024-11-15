@@ -151,9 +151,7 @@ def train_epoch(
     loss_function : _Loss,
     clip: float,
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler],
-    print_iter: int,
     window_size: int,
-    pad_token: int,
     device: Device,
     batch_size: int,
 ):
@@ -268,9 +266,7 @@ def train_cycle(
             loss_function,
             hyperparams["max_grad_norm"],
             scheduler,
-            hyperparams["print_iter"],
             hyperparams["window"],
-            pad_token,
             device,
             hyperparams["batch_size"],
         )
