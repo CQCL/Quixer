@@ -9,6 +9,7 @@ import numpy as np
 
 import torch
 from torch.types import Device
+from torch.nn.modules.loss import _Loss
 import torchtext
 
 from model import Quixer
@@ -147,7 +148,7 @@ def train_epoch(
     model: torch.nn.Module,
     iterator: torch.Tensor,
     optimizer: torch.optim.Optimizer,
-    criterion,
+    loss_function : _Loss,
     clip: float,
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler],
     print_iter: int,
@@ -173,7 +174,7 @@ def train_epoch(
 
         yhat, norm_avg = model(x)
 
-        loss = criterion(yhat, y)
+        loss = loss_function(yhat, y)
         loss.backward()
 
         if clip:
@@ -191,7 +192,7 @@ def train_epoch(
 def evaluate(
     model: torch.nn.Module,
     iterator,
-    criterion,
+    loss_function : _Loss,
     window_size: int,
     pad_token: int,
     device: torch.device,
@@ -211,7 +212,7 @@ def evaluate(
 
             yhat, _ = model(x)
 
-            loss = criterion(yhat, y)
+            loss = loss_function(yhat, y)
 
             epoch_loss += loss.item()
 
@@ -243,13 +244,13 @@ def train_cycle(
             optimizer, T_0=hyperparams["restart_epochs"]
         )
 
-    criterion = torch.nn.CrossEntropyLoss()
+    loss_function = torch.nn.CrossEntropyLoss()
 
     def _evaluate(iter: torch.Tensor):
         return evaluate(
             model,
             iter,
-            criterion,
+            loss_function,
             hyperparams["window"],
             pad_token,
             device,
@@ -264,7 +265,7 @@ def train_cycle(
             model,
             train_iter,
             optimizer,
-            criterion,
+            loss_function,
             hyperparams["max_grad_norm"],
             scheduler,
             hyperparams["print_iter"],
