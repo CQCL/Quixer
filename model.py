@@ -2,6 +2,7 @@ import itertools
 from math import log2
 
 import torch
+from torch.types import Device
 import torchquantum as tq
 
 
@@ -52,7 +53,7 @@ class Quixer(torch.nn.Module):
                  vocab_size: int,
                  embedding_dim: int,
                  dropout: float,
-                 device):
+                 device : Device):
         """
         n_qubits: int
             Number of qubits per word.
