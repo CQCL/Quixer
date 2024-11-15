@@ -49,7 +49,7 @@ def init_weights(model: torch.nn.Module) -> None:
 
 
 def setup_dataset(
-    device: torch.device,
+    device: Device,
     batch_size: int,
     bptt: int
 ) -> Tuple[torchtext.vocab.Vocab, Tuple[torch.Tensor, torch.Tensor, torch.Tensor], int]:
@@ -99,7 +99,7 @@ def get_batch_s2s(source, i, BPTT, *args):
 
 
 def create_model(
-    hyperparams: dict[str, Any], device: torch.device, vocab_size: int
+    hyperparams: dict[str, Any], device: Device, vocab_size: int
 ) -> torch.nn.Module:
     model_str = hyperparams["model"]
     if model_str == "QLINSVT":
@@ -154,7 +154,7 @@ def train_epoch(
     print_iter: int,
     window_size: int,
     pad_token: int,
-    device: torch.device,
+    device: Device,
     batch_size: int,
 ):
     model.train()
@@ -195,7 +195,7 @@ def evaluate(
     loss_function : _Loss,
     window_size: int,
     pad_token: int,
-    device: torch.device,
+    device: Device,
     batch_size: int,
 ) -> float:
     model.eval()
@@ -222,7 +222,7 @@ def evaluate(
 def train_cycle(
     model: torch.nn.Module,
     hyperparams: dict[str, Any],
-    device: torch.device,
+    device: Device,
     train_iter: torch.Tensor,
     val_iter: torch.Tensor,
     test_iter: torch.Tensor,
@@ -308,7 +308,7 @@ def seed(SEED: int) -> None:
     torch.cuda.manual_seed(SEED)
 
 
-def get_train_evaluate(device: torch.device) -> Callable:
+def get_train_evaluate(device: Device) -> Callable:
     def train_evaluate(parameterization: dict[str, Any]) -> float:
         """
         Train the model and then compute an evaluation metric.
