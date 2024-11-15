@@ -94,8 +94,8 @@ def setup_dataset(
     return vocab, (train_iter, val_iter, test_iter), PAD_TOK
 
 
-def get_batch_s2s(source, i, BPTT, *args):
-    return source[i: i + BPTT].T, source[i + BPTT]
+def get_batch_s2s(source : torch.Tensor, i : int, window_size : int, *args):
+    return source[i: i + window_size].T, source[i + window_size]
 
 
 def create_model(
