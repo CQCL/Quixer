@@ -4,6 +4,7 @@ from math import log2
 import torch
 from torch.types import Device
 import torchquantum as tq
+from torchquantum import GeneralEncoder, QuantumDevice
 
 
 def sim14_encoder(n_wires, layers=1):
@@ -19,7 +20,7 @@ def sim14_encoder(n_wires, layers=1):
     return enc
 
 
-def evaluate_polynomial_state(base_states, unitary_params, enc, qdev, n_qbs, lcu_coeffs, poly_coeffs):
+def evaluate_polynomial_state(base_states: torch.Tensor, unitary_params: torch.Tensor, enc: GeneralEncoder, qdev: QuantumDevice, n_qbs: int, lcu_coeffs: torch.Tensor, poly_coeffs: torch.Tensor) -> torch.Tensor:
     acc = poly_coeffs[0] * base_states
     working_register = base_states
 
@@ -30,7 +31,7 @@ def evaluate_polynomial_state(base_states, unitary_params, enc, qdev, n_qbs, lcu
     return acc / torch.linalg.vector_norm(poly_coeffs, ord=1)
 
 
-def apply_unitaries(base_states, unitary_params, enc, qdev, n_qbs, coeffs):
+def apply_unitaries(base_states: torch.Tensor, unitary_params: torch.Tensor, enc: GeneralEncoder, qdev: QuantumDevice, n_qbs: int, coeffs: torch.Tensor) -> torch.Tensor:
 
     repeated_base = base_states.repeat(1, unitary_params.shape[1]).view(-1, 2 ** n_qbs)
     qdev.set_states(repeated_base)
