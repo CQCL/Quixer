@@ -54,6 +54,7 @@ class Quixer(torch.nn.Module):
                  vocab_size: int,
                  embedding_dim: int,
                  dropout: float,
+                 batch_size : int,
                  device : Device):
         """
         n_qubits: int
@@ -102,7 +103,7 @@ class Quixer(torch.nn.Module):
         self.dropout = torch.nn.Dropout(dropout)
         self.rot_sigm = torch.nn.Sigmoid()
 
-        self.q_device = tq.QuantumDevice(n_wires=self.n_qubits)
+        self.q_device = tq.QuantumDevice(n_wires=self.n_qubits, bsz = batch_size)
 
         # Preparation of word unitaries
         self.word_qencoder = tq.GeneralEncoder(sim14_encoder(n_qubits, n_ansatz_layers))
