@@ -102,6 +102,7 @@ def create_model(
     hyperparams: dict[str, Any], device: Device, vocab_size: int
 ) -> torch.nn.Module:
     model_str = hyperparams["model"]
+    model : torch.nn.Module
     if model_str == "QLINSVT":
         model = Quixer(
             n_qubits=hyperparams["qubits"],
@@ -111,6 +112,7 @@ def create_model(
             vocab_size=vocab_size,
             embedding_dim=hyperparams["dimension"],
             dropout=hyperparams["dropout"],
+            batch_size=hyperparams["batch_size"],
             device=device,
         )
     elif model_str == "FNet":
