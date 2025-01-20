@@ -142,7 +142,7 @@ def create_model(
             n_layers=hyperparams["layers"],
             dropout=hyperparams["dropout"],
         )
-    elif model_str == "VAS":
+    elif model_str == "Transformer":
         model = Transformer(
             emb_dim=hyperparams["dimension"],
             hid_dim=4 * hyperparams["dimension"],

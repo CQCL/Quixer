@@ -1,10 +1,9 @@
-import sys
+import argparse
 import torch
 
 from quixer.setup_training import get_train_evaluate
 
-device_name = sys.argv[1] if len(sys.argv) >= 3 else "cpu"
-
+# Default hyperparameters for each of the models
 
 quixer_hparams = {
     "qubits": 6,
@@ -59,7 +58,7 @@ fnet_hparams = {
 }
 
 
-vas_hparams = {
+transformer_hparams = {
     "layers": 1,
     "heads": 1,
     "window": 32,
@@ -72,21 +71,33 @@ vas_hparams = {
     "eps": 1e-10,
     "batch_size": 32,
     "max_grad_norm": 5.0,
-    "model": "VAS",
+    "model": "Transformer",
     "print_iter": 50,
 }
 
 
-cdimensions = [96, 128]
-qdimensions = [512]
+# Embedding dimensions
+classical_embedding_dimensions = [96, 128]
+quantum_embedding_dimensions = [512]
 
 
 model_map = {
-    "Quixer": (quixer_hparams, qdimensions),
-    "VAS": (vas_hparams, cdimensions),
-    "LSTM": (lstm_hparams, cdimensions),
-    "FNet": (fnet_hparams, cdimensions),
+    "Quixer": (quixer_hparams, quantum_embedding_dimensions),
+    "Transformer": (transformer_hparams, classical_embedding_dimensions),
+    "LSTM": (lstm_hparams, classical_embedding_dimensions),
+    "FNet": (fnet_hparams, classical_embedding_dimensions),
 }
+
+available_models = list(model_map.keys())
+
+args = argparse.ArgumentParser(prog = "Quixer", description="Runs the Quixer model and/or classical baselines")
+args.add_argument("-m","--model", default="Quixer", choices=available_models, nargs="*", help="Model(s) to run.")
+args.add_argument("-d","--device", default="cpu", help="Device to run training on.")
+
+parsed = args.parse_args()
+
+device_name = parsed.device
+models_to_run = parsed.model
 
 
 torch.backends.cudnn.deterministic = True
@@ -98,8 +109,8 @@ print(f"Running on device: {device}")
 train_evaluate = get_train_evaluate(device)
 
 
-for model_name, meta in model_map.items():
-    fix_hyperparams, dimensions = meta
+for model_name in models_to_run:
+    fix_hyperparams, dimensions = model_map[model_name]
     for dim in dimensions:
         for seed in torch.randint(high=1000000, size=(10,)).tolist():
             fix_hyperparams["model"] = model_name
