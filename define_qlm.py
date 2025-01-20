@@ -103,7 +103,7 @@ def create_model(
 ) -> torch.nn.Module:
     model_str = hyperparams["model"]
     model : torch.nn.Module
-    if model_str == "QLINSVT":
+    if model_str == "Quixer":
         model = Quixer(
             n_qubits=hyperparams["qubits"],
             n_words=hyperparams["window"],

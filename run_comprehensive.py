@@ -29,7 +29,7 @@ quixer_hparams = {
     "eps": 1e-10,
     "batch_size": 32,
     "max_grad_norm": 5.0,
-    "model": "QLINSVT",
+    "model": "Quixer",
     "print_iter": 50
 }
 
@@ -91,10 +91,10 @@ qdimensions = [512]
 
 
 model_map = {
+    "Quixer": (quixer_hparams, qdimensions),
     "VAS": (vas_hparams, cdimensions),
     "LSTM": (lstm_hparams, cdimensions),
     "FNet": (fnet_hparams, cdimensions),
-    "QLINSVT": (quixer_hparams, qdimensions)
 }
 
 
