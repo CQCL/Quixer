@@ -27,14 +27,14 @@ def epoch_time(start_time: float, end_time: float) -> Tuple[float, float]:
     return elapsed_mins, elapsed_secs
 
 
-def batchify_s2s(data: torch.Tensor, batch_size : int, bptt : int, pad_token : int, device : Device) -> torch.Tensor:
-    seq_len = (data.size(0) - 1) // batch_size
-    batched_data = data[: seq_len * batch_size].view(batch_size, seq_len).T
+def batchify_s2s(data: torch.Tensor, tokens_per_batch : int, window_size : int, pad_token : int, device : Device) -> torch.Tensor:
+    nr_of_batches = (data.size(0) - 1) // tokens_per_batch
+    batched_data = data[: nr_of_batches * tokens_per_batch].view(tokens_per_batch, nr_of_batches).T
 
     # Take last BPTT elements for all but the last batch
-    bptt_data = torch.cat((torch.full((bptt, 1), pad_token, device=device), batched_data[-bptt:, :-1]), dim=1)
+    window_data = torch.cat((torch.full((window_size, 1), pad_token, device=device), batched_data[-window_size:, :-1]), dim=1)
 
-    return torch.cat((bptt_data, batched_data))
+    return torch.cat((window_data, batched_data))
 
 
 def init_weights(model: torch.nn.Module) -> None:
