@@ -14,14 +14,18 @@ authors = [
 ]
 keywords = ["Quixer"]
 dependencies = [
-    "torch>=2.2.0",
-    "torchquantum>=0.1.8",
-    "torchvision>=0.20.0",
+    "torch>=2.2,<2.3",
+    "torchtext>=0.17,<0.18",
+    "torchquantum>=0.1.8,<0.2",
+    "torchvision>=0.17,<0.18",
+    "numpy~=1.0",
+    "datasets>=3.2,<3.3",
     "qiskit<1.0",
     "qiskit-aer==0.13.3",
     "qiskit-ibm-provider==0.10.0",
     "qiskit-ibm-runtime==0.20.0",
-    "qiskit-terra"
+    "qiskit-terra",
+    "tqdm>=4.67,<4.68"
 ]
 
 [tool.setuptools]
@@ -29,9 +33,9 @@ py-modules = ["quixer"]
 
 [project.optional-dependencies]
 dev = [
-    "flake8",
-    "black",
+    "flake8>=7.1,<7.2",
+    "black>=24.10,<24.11",
 ]
 test = [
-    "pytest",
+    "pytest>=8.3,<8.4",
 ]
