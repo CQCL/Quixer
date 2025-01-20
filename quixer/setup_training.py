@@ -39,7 +39,7 @@ def batchify_s2s(
         data[: nr_of_batches * tokens_per_batch].view(tokens_per_batch, nr_of_batches).T
     )
 
-    # Take last BPTT elements for all but the last batch
+    # Take last `window_size` elements for all but the last batch
     window_data = torch.cat(
         (
             torch.full((window_size, 1), pad_token, device=device),
