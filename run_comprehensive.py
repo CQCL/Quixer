@@ -10,9 +10,9 @@ from itertools import product
 import numpy as np
 import torch
 
-from define_qlm import get_train_evaluate
+from quixer.setup_training import get_train_evaluate
 
-device_name = sys.argv[1] if len(sys.argv) >= 3 else 'cpu'
+device_name = sys.argv[1] if len(sys.argv) >= 3 else "cpu"
 
 
 quixer_hparams = {
@@ -30,7 +30,7 @@ quixer_hparams = {
     "batch_size": 32,
     "max_grad_norm": 5.0,
     "model": "Quixer",
-    "print_iter": 50
+    "print_iter": 50,
 }
 
 
@@ -47,7 +47,7 @@ lstm_hparams = {
     "eps": 1e-10,
     "batch_size": 32,
     "max_grad_norm": 5.0,
-    "print_iter": 50
+    "print_iter": 50,
 }
 
 
@@ -64,7 +64,7 @@ fnet_hparams = {
     "batch_size": 32,
     "max_grad_norm": 5.0,
     "model": "FNet",
-    "print_iter": 50
+    "print_iter": 50,
 }
 
 
@@ -82,7 +82,7 @@ vas_hparams = {
     "batch_size": 32,
     "max_grad_norm": 5.0,
     "model": "VAS",
-    "print_iter": 50
+    "print_iter": 50,
 }
 
 

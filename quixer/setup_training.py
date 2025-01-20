@@ -12,8 +12,8 @@ from torch.types import Device
 from torch.nn.modules.loss import _Loss
 import torchtext
 
-from model import Quixer
-from ctransformer import Transformer, LSTM, FNet
+from quixer.quixer_model import Quixer
+from quixer.baseline_models import Transformer, LSTM, FNet
 
 from datasets import load_dataset
 from torchtext.vocab import build_vocab_from_iterator
@@ -27,12 +27,26 @@ def epoch_time(start_time: float, end_time: float) -> Tuple[float, float]:
     return elapsed_mins, elapsed_secs
 
 
-def batchify_s2s(data: torch.Tensor, tokens_per_batch : int, window_size : int, pad_token : int, device : Device) -> torch.Tensor:
+def batchify_s2s(
+    data: torch.Tensor,
+    tokens_per_batch: int,
+    window_size: int,
+    pad_token: int,
+    device: Device,
+) -> torch.Tensor:
     nr_of_batches = (data.size(0) - 1) // tokens_per_batch
-    batched_data = data[: nr_of_batches * tokens_per_batch].view(tokens_per_batch, nr_of_batches).T
+    batched_data = (
+        data[: nr_of_batches * tokens_per_batch].view(tokens_per_batch, nr_of_batches).T
+    )
 
     # Take last BPTT elements for all but the last batch
-    window_data = torch.cat((torch.full((window_size, 1), pad_token, device=device), batched_data[-window_size:, :-1]), dim=1)
+    window_data = torch.cat(
+        (
+            torch.full((window_size, 1), pad_token, device=device),
+            batched_data[-window_size:, :-1],
+        ),
+        dim=1,
+    )
 
     return torch.cat((window_data, batched_data))
 
@@ -45,13 +59,12 @@ def init_weights(model: torch.nn.Module) -> None:
                 torch.nn.init.zeros_(m.bias)
         elif isinstance(m, torch.nn.Embedding):
             torch.nn.init.normal_(m.weight, mean=0.0, std=0.02)
+
     model.apply(_init_weights)
 
 
 def setup_dataset(
-    device: Device,
-    batch_size: int,
-    window_size: int
+    device: Device, batch_size: int, window_size: int
 ) -> Tuple[torchtext.vocab.Vocab, Tuple[torch.Tensor, torch.Tensor, torch.Tensor], int]:
     # Download / load dataset
 
@@ -87,22 +100,28 @@ def setup_dataset(
     test_flat = data_process(test_sents)
 
     # Prepare (x, y) pairs for batches
-    train_iter = batchify_s2s(train_flat, batch_size * window_size, window_size, PAD_TOK, device)
-    val_iter = batchify_s2s(val_flat, batch_size * window_size, window_size, PAD_TOK, device)
-    test_iter = batchify_s2s(test_flat, batch_size * window_size, window_size, PAD_TOK, device)
+    train_iter = batchify_s2s(
+        train_flat, batch_size * window_size, window_size, PAD_TOK, device
+    )
+    val_iter = batchify_s2s(
+        val_flat, batch_size * window_size, window_size, PAD_TOK, device
+    )
+    test_iter = batchify_s2s(
+        test_flat, batch_size * window_size, window_size, PAD_TOK, device
+    )
 
     return vocab, (train_iter, val_iter, test_iter), PAD_TOK
 
 
-def get_batch_s2s(source : torch.Tensor, i : int, window_size : int, *args):
-    return source[i: i + window_size].T, source[i + window_size]
+def get_batch_s2s(source: torch.Tensor, i: int, window_size: int, *args):
+    return source[i : i + window_size].T, source[i + window_size]
 
 
 def create_model(
     hyperparams: dict[str, Any], device: Device, vocab_size: int
 ) -> torch.nn.Module:
     model_str = hyperparams["model"]
-    model : torch.nn.Module
+    model: torch.nn.Module
     if model_str == "Quixer":
         model = Quixer(
             n_qubits=hyperparams["qubits"],
@@ -130,7 +149,7 @@ def create_model(
             n_heads=hyperparams["heads"],
             n_layers=hyperparams["layers"],
             vocab_size=vocab_size,
-            dropout=hyperparams["dropout"]
+            dropout=hyperparams["dropout"],
         )
     elif model_str == "LSTM":
         model = LSTM(
@@ -138,7 +157,7 @@ def create_model(
             hid_dim=hyperparams["dimension"],
             n_layers=hyperparams["layers"],
             vocab_size=vocab_size,
-            dropout=hyperparams["dropout"]
+            dropout=hyperparams["dropout"],
         )
     else:
         raise ValueError(f"Unrecognized model: {model_str}")
@@ -150,7 +169,7 @@ def train_epoch(
     model: torch.nn.Module,
     iterator: torch.Tensor,
     optimizer: torch.optim.Optimizer,
-    loss_function : _Loss,
+    loss_function: _Loss,
     clip: float,
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler],
     window_size: int,
@@ -167,9 +186,7 @@ def train_epoch(
     random.shuffle(idxs)
 
     for ctr, batch_idx in tqdm(enumerate(idxs), total=n_batches):
-        x, y = get_batch_s2s(
-            iterator, batch_idx, window_size, device, batch_size
-        )
+        x, y = get_batch_s2s(iterator, batch_idx, window_size, device, batch_size)
         optimizer.zero_grad()
 
         yhat, norm_avg = model(x)
@@ -206,9 +223,7 @@ def evaluate(
 
     with torch.no_grad():
         for batch_idx in tqdm(range(n_batches)):
-            x, y = get_batch_s2s(
-                iterator, batch_idx, window_size, device, batch_size
-            )
+            x, y = get_batch_s2s(iterator, batch_idx, window_size, device, batch_size)
 
             yhat, _ = model(x)
 
@@ -239,7 +254,7 @@ def train_cycle(
     )
 
     scheduler = None
-    if hyperparams["lr_sched"] == 'cos':
+    if hyperparams["lr_sched"] == "cos":
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
             optimizer, T_0=hyperparams["restart_epochs"]
         )
@@ -318,9 +333,7 @@ def get_train_evaluate(device: Device) -> Callable:
         seed(parameterization["seed"])
 
         vocab, (train_iter, val_iter, test_iter), PAD_TOK = setup_dataset(
-            device,
-            parameterization["batch_size"],
-            parameterization["window"]
+            device, parameterization["batch_size"], parameterization["window"]
         )
 
         model = create_model(parameterization, device, len(vocab))

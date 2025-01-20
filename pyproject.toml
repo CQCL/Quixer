@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quixer"
+version = "0.1.0"
+description = "Quixer"
+readme = "README.md"
+requires-python = ">= 3.11"
+authors = [
+    {name="Nikhil Khatri", email = "nikhil.khatri@quantinuum.com"},
+    {name="Gabriel Matos", email = "gabriel.matos@quantinuum.com"}
+]
+keywords = ["Quixer"]
+dependencies = [
+    "torch>=2.2.0",
+    "torchquantum>=0.1.8",
+    "torchvision>=0.20.0",
+    "qiskit<1.0",
+    "qiskit-aer==0.13.3",
+    "qiskit-ibm-provider==0.10.0",
+    "qiskit-ibm-runtime==0.20.0",
+    "qiskit-terra"
+]
+
+[tool.setuptools]
+py-modules = ["quixer"]
+
+[project.optional-dependencies]
+dev = [
+    "flake8",
+    "black",
+]
+test = [
+    "pytest",
+]
