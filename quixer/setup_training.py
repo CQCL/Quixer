@@ -211,7 +211,6 @@ def evaluate(
     iterator: torch.Tensor,
     loss_function: _Loss,
     window_size: int,
-    pad_token: int,
     device: Device,
     batch_size: int,
 ) -> float:
@@ -267,7 +266,6 @@ def train_cycle(
             iter,
             loss_function,
             hyperparams["window"],
-            pad_token,
             device,
             hyperparams["batch_size"],
         )
