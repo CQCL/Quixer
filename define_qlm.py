@@ -51,7 +51,7 @@ def init_weights(model: torch.nn.Module) -> None:
 def setup_dataset(
     device: Device,
     batch_size: int,
-    bptt: int
+    window_size: int
 ) -> Tuple[torchtext.vocab.Vocab, Tuple[torch.Tensor, torch.Tensor, torch.Tensor], int]:
     # Download / load dataset
 
@@ -87,9 +87,9 @@ def setup_dataset(
     test_flat = data_process(test_sents)
 
     # Prepare (x, y) pairs for batches
-    train_iter = batchify_s2s(train_flat, batch_size * bptt, bptt, PAD_TOK, device)
-    val_iter = batchify_s2s(val_flat, batch_size * bptt, bptt, PAD_TOK, device)
-    test_iter = batchify_s2s(test_flat, batch_size * bptt, bptt, PAD_TOK, device)
+    train_iter = batchify_s2s(train_flat, batch_size * window_size, window_size, PAD_TOK, device)
+    val_iter = batchify_s2s(val_flat, batch_size * window_size, window_size, PAD_TOK, device)
+    test_iter = batchify_s2s(test_flat, batch_size * window_size, window_size, PAD_TOK, device)
 
     return vocab, (train_iter, val_iter, test_iter), PAD_TOK
 
