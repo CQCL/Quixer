@@ -13,6 +13,8 @@ authors = [
     {name="Gabriel Matos", email = "gabriel.matos@quantinuum.com"}
 ]
 keywords = ["Quixer"]
+license = {text = "Apache-2.0"}
+
 dependencies = [
     "torch>=2.2,<2.3",
     "torchtext>=0.17,<0.18",
