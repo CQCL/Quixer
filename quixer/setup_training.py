@@ -209,8 +209,6 @@ def evaluate(
     iterator: torch.Tensor,
     loss_function: _Loss,
     window_size: int,
-    device: Device,
-    batch_size: int,
 ) -> float:
     model.eval()
 
@@ -261,9 +259,7 @@ def train_cycle(
             model,
             iter,
             loss_function,
-            hyperparams["window"],
-            device,
-            hyperparams["batch_size"],
+            hyperparams["window"]
         )
 
     best_valid_loss = float("inf")
