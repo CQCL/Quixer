@@ -113,7 +113,7 @@ def setup_dataset(
     return vocab, (train_iter, val_iter, test_iter), PAD_TOK
 
 
-def get_batch_s2s(source: torch.Tensor, i: int, window_size: int, *args):
+def get_batch_s2s(source: torch.Tensor, i: int, window_size: int):
     return source[i : i + window_size].T, source[i + window_size]
 
 
@@ -184,7 +184,7 @@ def train_epoch(
     random.shuffle(idxs)
 
     for ctr, batch_idx in tqdm(enumerate(idxs), total=n_batches):
-        x, y = get_batch_s2s(iterator, batch_idx, window_size, device, batch_size)
+        x, y = get_batch_s2s(iterator, batch_idx, window_size)
         optimizer.zero_grad()
 
         yhat, norm_avg = model(x)
@@ -220,7 +220,7 @@ def evaluate(
 
     with torch.no_grad():
         for batch_idx in tqdm(range(n_batches)):
-            x, y = get_batch_s2s(iterator, batch_idx, window_size, device, batch_size)
+            x, y = get_batch_s2s(iterator, batch_idx, window_size)
 
             yhat, _ = model(x)
 
