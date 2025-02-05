@@ -6,6 +6,8 @@ This is the code repository for the paper [Quixer: A Quantum Transformer Model](
 
 > [!IMPORTANT]
 > It is recommended that you first install the version of `torch` 2.2.2 suitable to your platform by following the instructions [here](https://pytorch.org/get-started/previous-versions/#v222), or the command below may not work.
+> When installing using the above link, add `torchtext==0.17.1` to the installation command. For example
+> ``` conda install pytorch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 torchtext==0.17.1 cpuonly -c pytorch ```
 
 ```
 pip install -e .
