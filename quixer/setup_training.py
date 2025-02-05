@@ -234,7 +234,6 @@ def evaluate(
 def train_cycle(
     model: torch.nn.Module,
     hyperparams: dict[str, Any],
-    device: Device,
     train_iter: torch.Tensor,
     val_iter: torch.Tensor,
     test_iter: torch.Tensor
@@ -338,7 +337,6 @@ def get_train_evaluate(device: Device) -> Callable:
         valid_loss = train_cycle(
             model,
             parameterization,
-            device,
             train_iter,
             val_iter,
             test_iter
