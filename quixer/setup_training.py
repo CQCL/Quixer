@@ -239,8 +239,7 @@ def train_cycle(
     device: Device,
     train_iter: torch.Tensor,
     val_iter: torch.Tensor,
-    test_iter: torch.Tensor,
-    pad_token: int,
+    test_iter: torch.Tensor
 ) -> float:
 
     checkpoint_fpath = f"./trained_models/q_transformer_lm_{hyperparams['model']}_{hyperparams['seed']}_{int(time.time())}.pt"
@@ -346,8 +345,7 @@ def get_train_evaluate(device: Device) -> Callable:
             device,
             train_iter,
             val_iter,
-            test_iter,
-            PAD_TOK,
+            test_iter
         )
 
         return valid_loss
