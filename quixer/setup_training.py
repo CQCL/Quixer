@@ -21,6 +21,14 @@ from torchtext.data.utils import get_tokenizer
 
 
 def epoch_time(start_time: float, end_time: float) -> Tuple[float, float]:
+    """
+    Computes time elapsed in minutes and seconds when given two UNIX timestamps
+    with the starting time and ending time.
+
+    Args:
+      start_time: Starting time as a UNIX timestamp.
+      end_time: End time as a UNIX timestamp.
+    """
     elapsed_time = end_time - start_time
     elapsed_mins = int(elapsed_time / 60)
     elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
@@ -51,7 +59,26 @@ def batchify_s2s(
     return torch.cat((window_data, batched_data))
 
 
-def init_weights(model: torch.nn.Module) -> None:
+def get_batch_s2s(source: torch.Tensor, i: int, window_size: int):
+    """
+    Returns the `i`th batch; expects one of the tensors returned by `setup_dataset`
+
+    Args:
+      source:
+        Tensor containing data.
+      i:
+        Index of the batch.
+      window_size:
+        Context window size.
+    """
+    return source[i : i + window_size].T, source[i + window_size]
+
+
+def initialise_weights(model: torch.nn.Module) -> None:
+    """
+    Initialises model weights.
+    """
+
     def _init_weights(m):
         if type(m) == torch.nn.Linear:
             torch.nn.init.xavier_uniform_(m.weight)
@@ -66,30 +93,48 @@ def init_weights(model: torch.nn.Module) -> None:
 def setup_dataset(
     device: Device, batch_size: int, window_size: int
 ) -> Tuple[torchtext.vocab.Vocab, Tuple[torch.Tensor, torch.Tensor, torch.Tensor], int]:
-    # Download / load dataset
+    """
+    Downloads and tokenizes the Penn TreeBank dataset, and then sets it up for a
+    next-word prediction task.
 
+    Args:
+      device: Device to store dataset on.
+      batch_size: Size of the batches.
+      window_size: Size of the context window.
+
+    Returns:
+      Vocabulary represented by a torchtext.vocab.Vocab instance along with
+      three torch tensors containing the batch data
+    """
+
+    # Download dataset from the Hugging Face Hub / load dataset
     raw_dset = load_dataset("ptb_text_only")
 
+    # Get training data in PyArrow format
     train_iter = raw_dset["train"].data[0]
+    # Convert from arrow array to native Python list
     train_iter = [s.as_py() for s in train_iter]
 
+    # Get torchtext tokenizer
     tokenizer = get_tokenizer("basic_english")
 
     vocab = build_vocab_from_iterator(
         map(tokenizer, train_iter), specials=["<pad>", "<unk>", "<eos>"]
     )
+    # Define unknown word as the default index to use
     vocab.set_default_index(vocab["<unk>"])
-    PAD_TOK = vocab["<pad>"]
 
     def data_process(raw_text_iter) -> torch.Tensor:
-        """Converts raw text into a flat Tensor."""
+        """
+        Converts raw text into a flat Tensor of token indices.
+        """
         data = [
             torch.tensor(vocab(tokenizer(item)) + [vocab["eos"]], dtype=torch.long)
             for item in raw_text_iter
         ]
         return torch.cat(tuple(filter(lambda t: t.numel() > 1, data))).to(device)
 
-    # Convert from arrow array to native list
+    # Convert from arrow arrays to native Python lists
     train_sents = [s.as_py() for s in raw_dset["train"].data[0]]
     val_sents = [s.as_py() for s in raw_dset["validation"].data[0]]
     test_sents = [s.as_py() for s in raw_dset["test"].data[0]]
@@ -99,44 +144,51 @@ def setup_dataset(
     val_flat = data_process(val_sents)
     test_flat = data_process(test_sents)
 
+    # Get padding token
+    PAD_TOKEN = vocab["<pad>"]
+
     # Prepare (x, y) pairs for batches
     train_iter = batchify_s2s(
-        train_flat, batch_size * window_size, window_size, PAD_TOK, device
+        train_flat, batch_size * window_size, window_size, PAD_TOKEN, device
     )
     val_iter = batchify_s2s(
-        val_flat, batch_size * window_size, window_size, PAD_TOK, device
+        val_flat, batch_size * window_size, window_size, PAD_TOKEN, device
     )
     test_iter = batchify_s2s(
-        test_flat, batch_size * window_size, window_size, PAD_TOK, device
+        test_flat, batch_size * window_size, window_size, PAD_TOKEN, device
     )
 
-    return vocab, (train_iter, val_iter, test_iter), PAD_TOK
-
-
-def get_batch_s2s(source: torch.Tensor, i: int, window_size: int):
-    return source[i : i + window_size].T, source[i + window_size]
+    return vocab, (train_iter, val_iter, test_iter), PAD_TOKEN
 
 
 def create_model(
-    hyperparams: dict[str, Any], device: Device, vocab_size: int
+    hyperparams: dict[str, Any], device: Device, vocabulary_size: int
 ) -> torch.nn.Module:
+    """
+    Selects and creates model based on hyperparameters passed.
+
+    Args:
+      hyperparams: Model hyperparameters.
+      device: Device the model will be run on.
+      vocabulary_size: Size of the vocabulary.
+    """
     model_str = hyperparams["model"]
     model: torch.nn.Module
     if model_str == "Quixer":
         model = Quixer(
             n_qubits=hyperparams["qubits"],
-            n_words=hyperparams["window"],
-            degree=hyperparams["layers"],
+            n_tokens=hyperparams["window"],
+            qsvt_polynomial_degree=hyperparams["layers"],
             n_ansatz_layers=hyperparams["ansatz_layers"],
-            vocab_size=vocab_size,
-            embedding_dim=hyperparams["dimension"],
+            vocabulary_size=vocabulary_size,
+            embedding_dimension=hyperparams["dimension"],
             dropout=hyperparams["dropout"],
             batch_size=hyperparams["batch_size"],
             device=device,
         )
     elif model_str == "FNet":
         model = FNet(
-            vocab_size=vocab_size,
+            vocab_size=vocabulary_size,
             emb_dim=hyperparams["dimension"],
             hid_dim=4 * hyperparams["dimension"],
             n_layers=hyperparams["layers"],
@@ -148,7 +200,7 @@ def create_model(
             hid_dim=4 * hyperparams["dimension"],
             n_heads=hyperparams["heads"],
             n_layers=hyperparams["layers"],
-            vocab_size=vocab_size,
+            vocab_size=vocabulary_size,
             dropout=hyperparams["dropout"],
         )
     elif model_str == "LSTM":
@@ -156,7 +208,7 @@ def create_model(
             emb_dim=hyperparams["dimension"],
             hid_dim=hyperparams["dimension"],
             n_layers=hyperparams["layers"],
-            vocab_size=vocab_size,
+            vocab_size=vocabulary_size,
             dropout=hyperparams["dropout"],
         )
     else:
@@ -210,6 +262,7 @@ def evaluate(
     loss_function: _Loss,
     window_size: int,
 ) -> float:
+
     model.eval()
 
     epoch_loss = 0
@@ -234,11 +287,22 @@ def train_cycle(
     hyperparams: dict[str, Any],
     train_iter: torch.Tensor,
     val_iter: torch.Tensor,
-    test_iter: torch.Tensor
+    test_iter: torch.Tensor,
 ) -> float:
+    """
+    Run a training cycle.
+
+    Args:
+      model: The model to train.
+      hyperparams: The model hyperparameters.
+      train_iter: Tensor containing training data returned by `setup_dataset` function.
+      val_iter: Tensor containing validation data returned by `setup_dataset` function.
+      test_iter: Tensor containing test returned by `setup_dataset` function.
+    """
 
     checkpoint_fpath = f"./trained_models/q_transformer_lm_{hyperparams['model']}_{hyperparams['seed']}_{int(time.time())}.pt"
 
+    # Set up optimizer
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=hyperparams["lr"],
@@ -246,6 +310,7 @@ def train_cycle(
         eps=hyperparams["eps"],
     )
 
+    # Set up learning rate scheduler
     scheduler = None
     if hyperparams["lr_sched"] == "cos":
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
@@ -255,12 +320,7 @@ def train_cycle(
     loss_function = torch.nn.CrossEntropyLoss()
 
     def _evaluate(iter: torch.Tensor):
-        return evaluate(
-            model,
-            iter,
-            loss_function,
-            hyperparams["window"]
-        )
+        return evaluate(model, iter, loss_function, hyperparams["window"])
 
     best_valid_loss = float("inf")
     for epoch in range(hyperparams["epochs"]):
@@ -273,7 +333,7 @@ def train_cycle(
             loss_function,
             hyperparams["max_grad_norm"],
             scheduler,
-            hyperparams["window"]
+            hyperparams["window"],
         )
 
         valid_loss = _evaluate(val_iter)
@@ -303,6 +363,12 @@ def train_cycle(
 
 
 def seed(SEED: int) -> None:
+    """
+    Sets the seed for Python's random module, numpy's RNG and torch's RNG
+
+    Args:
+      SEED: integer specifying the seed
+    """
     random.seed(SEED)
     np.random.seed(SEED)
     torch.manual_seed(SEED)
@@ -310,9 +376,20 @@ def seed(SEED: int) -> None:
 
 
 def get_train_evaluate(device: Device) -> Callable:
+    """
+    Returns a function that runs the training cycle on a specified torch device.
+
+    Args:
+      device: Torch device
+
+    Returns:
+      Callable taking in a set of parameters as a dict and returning the value of the validation loss
+      at the end of the training cycle.
+    """
+
     def train_evaluate(parameterization: dict[str, Any]) -> float:
         """
-        Train the model and then compute an evaluation metric.
+        Train the model and return a validation loss.
         """
 
         if "seed" not in parameterization:
@@ -326,16 +403,12 @@ def get_train_evaluate(device: Device) -> Callable:
 
         model = create_model(parameterization, device, len(vocab))
 
-        init_weights(model)
+        initialise_weights(model)
 
         model = model.to(device)
 
         valid_loss = train_cycle(
-            model,
-            parameterization,
-            train_iter,
-            val_iter,
-            test_iter
+            model, parameterization, train_iter, val_iter, test_iter
         )
 
         return valid_loss

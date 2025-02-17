@@ -3,7 +3,10 @@ import torch
 
 from quixer.setup_training import get_train_evaluate
 
-# Default hyperparameters for each of the models
+
+##################################################
+# Default hyperparameters for each of the models #
+##################################################
 
 quixer_hparams = {
     "qubits": 6,
@@ -75,31 +78,41 @@ transformer_hparams = {
     "print_iter": 50,
 }
 
+##################################################
+
 
 # Embedding dimensions
 classical_embedding_dimensions = [96, 128]
 quantum_embedding_dimensions = [512]
 
-
+# Dictionary defining available models along with associated hyperparameters
 model_map = {
     "Quixer": (quixer_hparams, quantum_embedding_dimensions),
     "Transformer": (transformer_hparams, classical_embedding_dimensions),
     "LSTM": (lstm_hparams, classical_embedding_dimensions),
     "FNet": (fnet_hparams, classical_embedding_dimensions),
 }
-
 available_models = list(model_map.keys())
 
-args = argparse.ArgumentParser(prog = "Quixer", description="Runs the Quixer model and/or classical baselines")
-args.add_argument("-m","--model", default="Quixer", choices=available_models, nargs="*", help="Model(s) to run.")
-args.add_argument("-d","--device", default="cpu", help="Device to run training on.")
-
+# Parse command line arguments
+args = argparse.ArgumentParser(
+    prog="Quixer", description="Runs the Quixer model and/or classical baselines"
+)
+args.add_argument(
+    "-m",
+    "--model",
+    default="Quixer",
+    choices=available_models,
+    nargs="*",
+    help="Model(s) to run.",
+)
+args.add_argument("-d", "--device", default="cpu", help="Device to run training on.")
 parsed = args.parse_args()
 
 device_name = parsed.device
-models_to_run = parsed.model
+models_to_run = parsed.model if type(parsed.model) is list else [parsed.model]
 
-
+# Make algorithms deterministic for reproducibility
 torch.backends.cudnn.deterministic = True
 
 
@@ -110,11 +123,11 @@ train_evaluate = get_train_evaluate(device)
 
 
 for model_name in models_to_run:
-    fix_hyperparams, dimensions = model_map[model_name]
-    for dim in dimensions:
+    hyperparameters, embedding_dimensions = model_map[model_name]
+    for embedding_dimension in embedding_dimensions:
         for seed in torch.randint(high=1000000, size=(10,)).tolist():
-            fix_hyperparams["model"] = model_name
-            fix_hyperparams["dimension"] = dim
-            fix_hyperparams["seed"] = seed
+            hyperparameters["model"] = model_name
+            hyperparameters["dimension"] = embedding_dimension
+            hyperparameters["seed"] = seed
 
-            train_evaluate(fix_hyperparams)
+            train_evaluate(hyperparameters)
