@@ -1,5 +1,6 @@
 import itertools
 from math import log2
+from typing import Any
 
 import torch
 from torch.types import Device
@@ -7,216 +8,334 @@ import torchquantum as tq
 from torchquantum import GeneralEncoder, QuantumDevice
 
 
-def sim14_encoder(n_wires, layers=1):
+def ansatz_14_torchquantum_specification(
+    n_qubits: int, layers: int = 1
+) -> list[dict[str, Any]]:
+    """
+    Produces a TorchQuantum specification for the parameterised quantum circuit "ansatz 14" from https://arxiv.org/abs/1905.10876
+
+    Args:
+      n_qubits:
+        Number of qubits in the circuit
+      layers:
+        Number of circuit layers
+    """
     enc = []
     counter = itertools.count(0)
     for _ in range(layers):
+        # First layer of R_Y rotations
         enc.extend(
             [
                 {"input_idx": [next(counter)], "func": "ry", "wires": [i]}
-                for i in range(n_wires)
+                for i in range(n_qubits)
             ]
         )
+        # First layer of Controlled R_X rotations
         enc.extend(
             [
                 {
                     "input_idx": [next(counter)],
                     "func": "crx",
-                    "wires": [i, (i + 1) % n_wires],
+                    "wires": [i, (i + 1) % n_qubits],
                 }
-                for i in range(n_wires - 1, -1, -1)
+                for i in range(n_qubits - 1, -1, -1)
             ]
         )
+        # Second layer of R_Y rotations
         enc.extend(
             [
                 {"input_idx": [next(counter)], "func": "ry", "wires": [i]}
-                for i in range(n_wires)
+                for i in range(n_qubits)
             ]
         )
+        # Second layer of Controlled R_X roations
         enc.extend(
             [
                 {
                     "input_idx": [next(counter)],
                     "func": "crx",
-                    "wires": [i, (i - 1) % n_wires],
+                    "wires": [i, (i - 1) % n_qubits],
                 }
-                for i in [n_wires - 1] + list(range(n_wires - 1))
+                for i in [n_qubits - 1] + list(range(n_qubits - 1))
             ]
         )
     return enc
 
 
-def evaluate_polynomial_state(
-    base_states: torch.Tensor,
-    unitary_params: torch.Tensor,
-    enc: GeneralEncoder,
-    qdev: QuantumDevice,
-    n_qbs: int,
-    lcu_coeffs: torch.Tensor,
-    poly_coeffs: torch.Tensor,
+def apply_qsvt_and_lcu(
+    initial_states: torch.Tensor,
+    pqc_parameters: torch.Tensor,
+    parameterised_quantum_circuit: GeneralEncoder,
+    torchquantum_device: QuantumDevice,
+    n_qubits: int,
+    lcu_coefficients: torch.Tensor,
+    qsvt_polynomial_coefficients: torch.Tensor,
 ) -> torch.Tensor:
-    acc = poly_coeffs[0] * base_states
-    working_register = base_states
+    """
+    Applies the Linear Combination of Unitaries and the Quantum Singular Value Decomposition polynomial
+    to a set of initial states. The unitaries are given by a parameterised quantum circuit
+    `parameterised_quantum_circuit` with angles `pqc_parameters`.
 
-    for c in poly_coeffs[1:]:
-        working_register = apply_unitaries(
-            working_register, unitary_params, enc, qdev, n_qbs, lcu_coeffs
+    Args:
+      initial_states:
+      pqc_parameters:
+      parameterised_quantum_circuit:
+      torchquantum_device:
+      n_qubits:
+      lcu_coefficients:
+      qsvt_polynomial_coefficients:
+
+    """
+    # Variable tracking the quantum state as the terms of the polynomial in the QSVT are applied
+    # Starts by applying constant term in the polynomial
+    accumulated_state = qsvt_polynomial_coefficients[0] * initial_states
+
+    # Intermediate variable storing quantum state as powers of the LCU are applied to it
+    # during construction of the QSVT polynomial. In each iteration of the loop below
+    # the exponent of the power is increased by one and added to the polynomial
+    monomial_state = initial_states
+    for c in qsvt_polynomial_coefficients[1:]:
+        monomial_state = apply_linear_combination_of_unitaries(
+            monomial_state,
+            pqc_parameters,
+            parameterised_quantum_circuit,
+            torchquantum_device,
+            n_qubits,
+            lcu_coefficients,
         )
-        acc = acc + c * working_register
+        accumulated_state = accumulated_state + c * monomial_state
 
-    return acc / torch.linalg.vector_norm(poly_coeffs, ord=1)
+    return accumulated_state / torch.linalg.vector_norm(
+        qsvt_polynomial_coefficients, ord=1
+    )
 
 
-def apply_unitaries(
-    base_states: torch.Tensor,
-    unitary_params: torch.Tensor,
-    enc: GeneralEncoder,
-    qdev: QuantumDevice,
-    n_qbs: int,
-    coeffs: torch.Tensor,
+def apply_linear_combination_of_unitaries(
+    initial_states: torch.Tensor,
+    pqc_parameters: torch.Tensor,
+    parameterised_quantum_circuit: GeneralEncoder,
+    torchquantum_device: QuantumDevice,
+    n_qubits: int,
+    lcu_coefficients: torch.Tensor,
 ) -> torch.Tensor:
+    """
+    Applies a linear combination of unitaries to a set of initial states. The unitaries
+    are obtained from a parameterised quantum circuit with the sets of parameters `pqc_parameters`.
 
-    repeated_base = base_states.repeat(1, unitary_params.shape[1]).view(-1, 2**n_qbs)
-    qdev.set_states(repeated_base)
+    Args:
+      initial_states:
+      pqc_parameters:
+      parameterised_quantum_circuit:
+      torchquantum_device:
+      n_qubits:
+      lcu_coefficients:
 
-    enc(qdev, unitary_params.view(-1, unitary_params.shape[-1]))
+    """
+    # Initial state repeated along the batch dimension
+    repeated_initial_state = initial_states.repeat(1, pqc_parameters.shape[1]).view(
+        -1, 2**n_qubits
+    )
 
-    states = qdev.get_states_1d().view(*unitary_params.shape[:2], 2**n_qbs)
+    # Set internal TorchQuantum device state to initial states
+    torchquantum_device.set_states(repeated_initial_state)
 
-    lcs = torch.einsum("bwi,bw->bi", states, coeffs)
+    # Apply circuit to initial states
+    parameterised_quantum_circuit(
+        torchquantum_device, pqc_parameters.view(-1, pqc_parameters.shape[-1])
+    )
 
-    return lcs
+    # Extract states from TorchQuantum device
+    states = torchquantum_device.get_states_1d().view(
+        *pqc_parameters.shape[:2], 2**n_qubits
+    )
+
+    # Sum evolved states weighed by LCU coefficients
+    lcu_applied_to_state = torch.einsum("bwi,bw->bi", states, lcu_coefficients)
+
+    return lcu_applied_to_state
 
 
 class Quixer(torch.nn.Module):
     def __init__(
         self,
         n_qubits: int,
-        n_words: int,
-        degree: int,
+        n_tokens: int,
+        qsvt_polynomial_degree: int,
         n_ansatz_layers: int,
-        vocab_size: int,
-        embedding_dim: int,
+        vocabulary_size: int,
+        embedding_dimension: int,
         dropout: float,
         batch_size: int,
         device: Device,
     ):
         """
-        n_qubits: int
+        Args:
+          n_qubits:
             Number of qubits per word.
-        n_words: int
-            Context length.
-        degree: int
-            Degree of polynomial.
-        n_ansatz_layers: int
-            Number of layers of circ 14.
-        vocab_size: int
-            Number of words in vocab. Used for embedding.
-        embedding_dim: int
-            Size of embedding vector for each word, before angles.
-        dropout: float
-            Dropout rate.
-        device:
-            Torch device.
+          n_tokens:
+            Context length i.e. number of tokens processed in one go.
+          qsvt_polynomial_degree:
+            Degree of quantum singular value transformation polynomial.
+          n_ansatz_layers:
+            Number of layers of the parameterized quantum circuit ansatz.
+          vocab_size:
+            Number of tokens in the vocabulary.
+          embedding_dimension:
+            Size of embedding vector for each token.
+          dropout:
+            Dropout rate (see https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html).
+          device:
+            Torch device the model will be classically simulated on.
         """
 
         super().__init__()
 
-        self.n_words = n_words
+        self.n_tokens = n_tokens
         self.n_qubits = n_qubits
 
-        assert degree > 0
-        self.degree = degree
+        assert qsvt_polynomial_degree > 0
+        self.degree = qsvt_polynomial_degree
         self.device = device
 
-        assert n_words != 0
-        self.n_ctrl_qubits = int(log2(n_words))
+        assert n_tokens != 0
+        # The number of Linear Combination of Unitaries control qubits
+        # must be large enough so as to be able to address/select the
+        # tokens being processed by the model
+        self.n_ctrl_qubits = int(log2(n_tokens))
 
-        # Sim14 spec
-        self.n_rots = 4 * n_qubits * n_ansatz_layers
+        # Number of parameters in the parameterized quantum circuit ansatz
+        self.n_pqc_parameters = 4 * n_qubits * n_ansatz_layers
 
-        self.embedding_dim = embedding_dim
+        self.embedding_dimension = embedding_dimension
 
-        self.embedding = torch.nn.Embedding(vocab_size, self.embedding_dim)
+        self.embedding = torch.nn.Embedding(vocabulary_size, self.embedding_dimension)
 
+        # Xavier uniform initialisation helps training
         torch.nn.init.xavier_uniform_(self.embedding.weight)
 
-        self.emb2rot = torch.nn.Linear(
-            in_features=self.embedding_dim, out_features=self.n_rots
+        # Linear layer converting the embeddings to angles for the parameterised circuit
+        self.embedding_to_angles = torch.nn.Linear(
+            in_features=self.embedding_dimension, out_features=self.n_pqc_parameters
         )
 
         self.dropout = torch.nn.Dropout(dropout)
-        self.rot_sigm = torch.nn.Sigmoid()
 
-        self.q_device = tq.QuantumDevice(n_wires=self.n_qubits, bsz=batch_size)
-
-        # Preparation of word unitaries
-        self.word_qencoder = tq.GeneralEncoder(sim14_encoder(n_qubits, n_ansatz_layers))
-        self.word_qencoder.n_wires = self.n_qubits
-
-        self.n_poly_coeffs = self.degree + 1
-        self.poly_coeffs = torch.nn.Parameter(torch.rand(self.n_poly_coeffs))
-        self.mix_coeffs = torch.nn.Parameter(
-            torch.rand(self.n_words, dtype=torch.complex64)
+        # TorchQuantum representation of quantum device
+        # Internally holds the statevector to be manipulated
+        self.torchquantum_device = tq.QuantumDevice(
+            n_wires=self.n_qubits, bsz=batch_size
         )
 
-        self.qff = tq.GeneralEncoder(sim14_encoder(n_qubits))
-        self.qff_params = torch.nn.Parameter(torch.rand(self.n_rots))
+        # TorchQuantum representation of "ansatz 14" parameterised quantum circuit
+        self.token_parameterised_quantum_circuit = tq.GeneralEncoder(
+            ansatz_14_torchquantum_specification(n_qubits, n_ansatz_layers)
+        )
+        self.token_parameterised_quantum_circuit.n_wires = self.n_qubits
 
-        self.measure_all_xyz = tq.MeasureMultipleTimes(
+        self.n_polynomial_coefficients = self.degree + 1
+
+        # Polynomial coefficients for the Quantum Singular Value Transformation
+        # e.g. if the QSVT applies the polynomial c_2 x^2 + c_1 x + c_0 then
+        # these are the coefficients [c_2, c_1, c_0]
+        self.qsvt_polynomial_coefficients = torch.nn.Parameter(
+            torch.rand(self.n_polynomial_coefficients)
+        )
+
+        # Coefficients for the Linear Combination of Unitaries
+        # i.e. if the LCU takes the form \sum_i b_i U_i then these
+        # are the coefficients [b_0, ..., b_n]
+        self.lcu_coefficients = torch.nn.Parameter(
+            torch.rand(self.n_tokens, dtype=torch.complex64)
+        )
+
+        # TorchQuantum representation of "ansatz 14" parameterised quantum circuit
+        self.quantum_feedforward = tq.GeneralEncoder(
+            ansatz_14_torchquantum_specification(n_qubits)
+        )
+
+        # TorchQuantum representation of "ansatz 14" parameterised quantum circuit
+        self.quantum_feedforward_parameters = torch.nn.Parameter(
+            torch.rand(self.n_pqc_parameters)
+        )
+
+        self.measure_all_x_y_z = tq.MeasureMultipleTimes(
             [
+                # X mesurements on all qubits
                 {"wires": range(n_qubits), "observables": ["x"] * n_qubits},
+                # Y measurements on all qubits
                 {"wires": range(n_qubits), "observables": ["y"] * n_qubits},
+                # Z measurements on all qubits
                 {"wires": range(n_qubits), "observables": ["z"] * n_qubits},
             ]
         )
 
-        self.n_measures = 3 * n_qubits
+        self.nr_of_measurements = 3 * n_qubits
 
-        self.output_ff = torch.nn.Sequential(
-            torch.nn.Linear(self.n_measures, self.embedding_dim),
+        # Output unembedding layer
+        # Produces logits for the output distribution over tokens
+        self.output_feedforward = torch.nn.Sequential(
+            torch.nn.Linear(self.nr_of_measurements, self.embedding_dimension),
             torch.nn.ReLU(),
-            torch.nn.Linear(self.embedding_dim, vocab_size),
+            torch.nn.Linear(self.embedding_dimension, vocabulary_size),
         )
 
     def forward(self, x):
+        batch_size = x.shape[0]
 
-        # [bsz, n_words]
-        bsz = x.shape[0]
+        # Tensor with shape [batch_size, n_tokens]
+        lcu_coefficients = self.lcu_coefficients.repeat(batch_size, 1)
+        lcu_coefficients = torch.nn.functional.normalize(lcu_coefficients, p=1)
 
-        mix_coeffs = self.mix_coeffs.repeat(bsz, 1)
-        mix_coeffs = torch.nn.functional.normalize(mix_coeffs, p=1)
-        # [bsz, n_words]
-
+        # Get token embeddings
+        # Tensor with shape  [batch_size, n_tokens, embedding_dim]
         x = self.embedding(x)
-        # [bsz, n_words, embedding_dim]
 
-        word_params = self.emb2rot(self.dropout(x))
-        # [bsz, n_words, n_rots]
+        # Get PQC angles corresponding to each token
+        # Tensor with shape [batch_size, n_tokens, n_pqc_parameters]
+        pqc_angles = self.embedding_to_angles(self.dropout(x))
 
-        base_states = torch.zeros(
-            bsz, 2**self.n_qubits, dtype=torch.complex64, device=self.device
+        # Initialise |0> state across all batches
+        # Tensor with shape [batch_size, 2**n_qubits]
+        initial_states = torch.zeros(
+            batch_size, 2**self.n_qubits, dtype=torch.complex64, device=self.device
         )
-        base_states[:, 0] = 1.0
-        mixed_word = evaluate_polynomial_state(
-            base_states,
-            word_params,
-            self.word_qencoder,
-            self.q_device,
+        initial_states[:, 0] = 1.0
+
+        # Quantum state resulting from the application of the QSVT and the LCU
+        # Tensor with shape [batch_size, 2**n_qubits]
+        qsvt_lcu_state = apply_qsvt_and_lcu(
+            initial_states,
+            pqc_angles,
+            self.token_parameterised_quantum_circuit,
+            self.torchquantum_device,
             self.n_qubits,
-            mix_coeffs,
-            self.poly_coeffs,
+            lcu_coefficients,
+            self.qsvt_polynomial_coefficients,
         )
 
-        # [bsz, 2 ** n_qbs]
+        # Load state after QSVT+LCU application into TorchQuantum device
+        self.torchquantum_device.set_states(
+            torch.nn.functional.normalize(qsvt_lcu_state, dim=-1)
+        )
 
-        final_probs = torch.linalg.vector_norm(mixed_word, dim=-1)
+        # Apply a PQC with a separate set of trainable parameters
+        self.quantum_feedforward(
+            self.torchquantum_device,
+            self.quantum_feedforward_parameters.repeat(1, batch_size),
+        )
 
-        self.q_device.set_states(torch.nn.functional.normalize(mixed_word, dim=-1))
-        self.qff(self.q_device, self.qff_params.repeat(1, bsz))
+        # Measure expectation values
+        expectation_values = self.measure_all_x_y_z(self.torchquantum_device)
+        expectation_values = (
+            expectation_values.reshape(3, batch_size, self.n_qubits)
+            .moveaxis(0, 1)
+            .reshape(batch_size, -1)
+        )
 
-        exps = self.measure_all_xyz(self.q_device)
-        exps = exps.reshape(3, bsz, self.n_qubits).moveaxis(0, 1).reshape(bsz, -1)
+        output_logits = self.output_feedforward(expectation_values)
 
-        op = self.output_ff(exps)
-        return op, torch.mean(final_probs)
+        # Postselection probabilities
+        # Tensor with shape [batch_size,]
+        final_probabilities = torch.linalg.vector_norm(qsvt_lcu_state, dim=-1)
+
+        return output_logits, torch.mean(final_probabilities)

@@ -3,7 +3,7 @@ import torch
 
 
 class PositionalEncoding(torch.nn.Module):
-    # Ref. https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+    # Reference: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
         super().__init__()
@@ -120,7 +120,6 @@ class LSTM(torch.nn.Module):
         self.project = torch.nn.Linear(emb_dim, vocab_size)
 
     def forward(self, x):
-
         x = self.embedding(x)
 
         rnn_op, _ = self.rnn(x)
