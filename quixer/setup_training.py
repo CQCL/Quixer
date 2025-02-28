@@ -37,20 +37,44 @@ def epoch_time(start_time: float, end_time: float) -> Tuple[float, float]:
 
 def batchify_s2s(
     data: torch.Tensor,
-    tokens_per_batch: int,
+    batch_size: int,
     window_size: int,
-    pad_token: int,
+    pad_token_id: int,
     device: Device,
 ) -> torch.Tensor:
-    nr_of_batches = (data.size(0) - 1) // tokens_per_batch
-    batched_data = (
-        data[: nr_of_batches * tokens_per_batch].view(tokens_per_batch, nr_of_batches).T
-    )
+    """
+    Takes in a sequence of token IDs as a torch tensor `data` and returns a torch tensor containing
+    the training data with shape `[number of batches + window_size, batch_size]`.
 
-    # Take last `window_size` elements for all but the last batch
+    Each batch is represented by `window_size` contiguous rows in the returned tensor and
+    can be extracted using the `get_batch_s2s` function.
+
+    A sequence of pad tokens of length `window_size-1` is prepended to the data so as to
+    provide a context window for the first token.
+
+    Args:
+      data: A 1D torch tensor containing a sequence of token IDs.
+      batch_size: The size each batch should have.
+      window_size: How many tokens are considered in each context window.
+      pad_token_id: The ID of the pad token, as supplied by the tokenizer.
+      device: Torch device the returned tensor is to be created on.
+
+    Returns:
+      Tensor containing data for each batch prepared for a next token prediction language
+      modelling task.
+    """
+    nr_of_batches = (data.size(0) - 1) // batch_size
+
+    # Discard tokens at the end of the data that do not fill a whole batch
+    batched_data = data[: nr_of_batches * batch_size].view(batch_size, nr_of_batches).T
+
+    # Data for the first batch
     window_data = torch.cat(
         (
-            torch.full((window_size, 1), pad_token, device=device),
+            # Adds a sequence of pad tokens of length `window_size-1`
+            # to provide a context window for the first token.
+            torch.full((window_size, 1), pad_token_id, device=device),
+            # Context for the first row of tokens in `batched_data`
             batched_data[-window_size:, :-1],
         ),
         dim=1,
@@ -59,17 +83,18 @@ def batchify_s2s(
     return torch.cat((window_data, batched_data))
 
 
-def get_batch_s2s(source: torch.Tensor, i: int, window_size: int):
+def get_batch_s2s(
+    source: torch.Tensor, i: int, window_size: int
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Returns the `i`th batch; expects one of the tensors returned by `setup_dataset`
+    Returns the `i`th batch; expects one of the tensors returned by `setup_dataset`.
 
     Args:
-      source:
-        Tensor containing data.
-      i:
-        Index of the batch.
-      window_size:
-        Context window size.
+      source: Tensor containing data.
+      i: Index of the batch.
+      window_size: Context window size.
+    Returns:
+      The `i`th batch.
     """
     return source[i : i + window_size].T, source[i + window_size]
 
@@ -104,7 +129,7 @@ def setup_dataset(
 
     Returns:
       Vocabulary represented by a torchtext.vocab.Vocab instance along with
-      three torch tensors containing the batch data
+      three torch tensors containing the training, validation and test data.
     """
 
     # Download dataset from the Hugging Face Hub / load dataset
@@ -147,7 +172,7 @@ def setup_dataset(
     # Get padding token
     PAD_TOKEN = vocab["<pad>"]
 
-    # Prepare (x, y) pairs for batches
+    # Prepare data for a next-token prediction language modelling task
     train_iter = batchify_s2s(
         train_flat, batch_size * window_size, window_size, PAD_TOKEN, device
     )
@@ -171,6 +196,8 @@ def create_model(
       hyperparams: Model hyperparameters.
       device: Device the model will be run on.
       vocabulary_size: Size of the vocabulary.
+    Returns:
+      An instance of a torch model based on the hyperparameters passed.
     """
     model_str = hyperparams["model"]
     model: torch.nn.Module
@@ -226,6 +253,9 @@ def train_epoch(
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler],
     window_size: int,
 ):
+    """
+    Runs training loop for one epoch.
+    """
     model.train()
 
     epoch_loss = 0
@@ -258,20 +288,23 @@ def train_epoch(
 
 def evaluate(
     model: torch.nn.Module,
-    iterator: torch.Tensor,
+    data: torch.Tensor,
     loss_function: _Loss,
     window_size: int,
 ) -> float:
+    """
+    Evaluates model on the supplied data.
+    """
 
     model.eval()
 
     epoch_loss = 0
 
-    n_batches = iterator.shape[0] - window_size
+    n_batches = data.shape[0] - window_size
 
     with torch.no_grad():
         for batch_idx in tqdm(range(n_batches)):
-            x, y = get_batch_s2s(iterator, batch_idx, window_size)
+            x, y = get_batch_s2s(data, batch_idx, window_size)
 
             yhat, _ = model(x)
 
@@ -297,7 +330,7 @@ def train_cycle(
       hyperparams: The model hyperparameters.
       train_iter: Tensor containing training data returned by `setup_dataset` function.
       val_iter: Tensor containing validation data returned by `setup_dataset` function.
-      test_iter: Tensor containing test returned by `setup_dataset` function.
+      test_iter: Tensor containing test data returned by `setup_dataset` function.
     """
 
     checkpoint_fpath = f"./trained_models/q_transformer_lm_{hyperparams['model']}_{hyperparams['seed']}_{int(time.time())}.pt"
@@ -364,7 +397,7 @@ def train_cycle(
 
 def seed(SEED: int) -> None:
     """
-    Sets the seed for Python's random module, numpy's RNG and torch's RNG
+    Sets the seed for Python's random module, numpy's RNG and torch's RNG.
 
     Args:
       SEED: integer specifying the seed
@@ -389,7 +422,7 @@ def get_train_evaluate(device: Device) -> Callable:
 
     def train_evaluate(parameterization: dict[str, Any]) -> float:
         """
-        Train the model and return a validation loss.
+        Train the model and return the test loss.
         """
 
         if "seed" not in parameterization:
