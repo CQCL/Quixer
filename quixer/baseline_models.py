@@ -60,7 +60,6 @@ class Transformer(torch.nn.Module):
 
 
 class FNet(torch.nn.Module):
-
     def __init__(
         self, emb_dim: int, hid_dim: int, n_layers: int, vocab_size: int, dropout: float
     ):

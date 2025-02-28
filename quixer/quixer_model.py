@@ -12,13 +12,15 @@ def ansatz_14_torchquantum_specification(
     n_qubits: int, layers: int = 1
 ) -> list[dict[str, Any]]:
     """
-    Produces a TorchQuantum specification for the parameterised quantum circuit "ansatz 14" from https://arxiv.org/abs/1905.10876
+    Produces a TorchQuantum specification for the parameterized quantum circuit "ansatz 14" from https://arxiv.org/abs/1905.10876
 
     Args:
       n_qubits:
         Number of qubits in the circuit
       layers:
         Number of circuit layers
+    Returns:
+      A TorchQuantum specification for the parameterized quantum circuit "ansatz 14"
     """
     enc = []
     counter = itertools.count(0)
@@ -65,7 +67,7 @@ def ansatz_14_torchquantum_specification(
 def apply_qsvt_and_lcu(
     initial_states: torch.Tensor,
     pqc_parameters: torch.Tensor,
-    parameterised_quantum_circuit: GeneralEncoder,
+    parameterized_quantum_circuit: GeneralEncoder,
     torchquantum_device: QuantumDevice,
     n_qubits: int,
     lcu_coefficients: torch.Tensor,
@@ -73,17 +75,19 @@ def apply_qsvt_and_lcu(
 ) -> torch.Tensor:
     """
     Applies the Linear Combination of Unitaries and the Quantum Singular Value Decomposition polynomial
-    to a set of initial states. The unitaries are given by a parameterised quantum circuit
-    `parameterised_quantum_circuit` with angles `pqc_parameters`.
+    to a set of initial states. The unitaries are given by a parameterized quantum circuit
+    `parameterized_quantum_circuit` with angles `pqc_parameters`. Note that the QSVT and
+    the LCU are applied via classical simulation and the full quantum circuit implementing
+    these constructs are not reproduced here.
 
     Args:
-      initial_states:
-      pqc_parameters:
-      parameterised_quantum_circuit:
-      torchquantum_device:
-      n_qubits:
-      lcu_coefficients:
-      qsvt_polynomial_coefficients:
+      initial_states: Batch of initial quantum states.
+      pqc_parameters: Batch of parameters for the parameterized quantum circuits encoding the token embeddings.
+      parameterized_quantum_circuit: TorchQuantum specification of the parameterized quantum circuit.
+      torchquantum_device: TorchQuantum object representing quantum device.
+      n_qubits: Number of qubits for quantum states corresponding to the token embeddings.
+      lcu_coefficients: Coefficients of the linear combination of unitaries.
+      qsvt_polynomial_coefficients: Coefficients of the polynomial applied using the QSVT.
 
     """
     # Variable tracking the quantum state as the terms of the polynomial in the QSVT are applied
@@ -98,7 +102,7 @@ def apply_qsvt_and_lcu(
         monomial_state = apply_linear_combination_of_unitaries(
             monomial_state,
             pqc_parameters,
-            parameterised_quantum_circuit,
+            parameterized_quantum_circuit,
             torchquantum_device,
             n_qubits,
             lcu_coefficients,
@@ -113,22 +117,24 @@ def apply_qsvt_and_lcu(
 def apply_linear_combination_of_unitaries(
     initial_states: torch.Tensor,
     pqc_parameters: torch.Tensor,
-    parameterised_quantum_circuit: GeneralEncoder,
+    parameterized_quantum_circuit: GeneralEncoder,
     torchquantum_device: QuantumDevice,
     n_qubits: int,
     lcu_coefficients: torch.Tensor,
 ) -> torch.Tensor:
     """
     Applies a linear combination of unitaries to a set of initial states. The unitaries
-    are obtained from a parameterised quantum circuit with the sets of parameters `pqc_parameters`.
+    are obtained from a parameterized quantum circuit with the sets of parameters `pqc_parameters`.
+    Note that the LCU is applied via classical simulation and the full quantum circuit implementing
+    this constructs is not reproduced here.
 
     Args:
-      initial_states:
-      pqc_parameters:
-      parameterised_quantum_circuit:
-      torchquantum_device:
-      n_qubits:
-      lcu_coefficients:
+      initial_states: Batch of initial quantum states.
+      pqc_parameters: Batch of parameters for the parameterized quantum circuits encoding the token embeddings.
+      parameterized_quantum_circuit: TorchQuantum specification of the parameterized quantum circuit.
+      torchquantum_device: TorchQuantum object representing quantum device.
+      n_qubits: Number of qubits for quantum states corresponding to the token embeddings.
+      lcu_coefficients: Coefficients of the linear combination of unitaries.
 
     """
     # Initial state repeated along the batch dimension
@@ -140,7 +146,7 @@ def apply_linear_combination_of_unitaries(
     torchquantum_device.set_states(repeated_initial_state)
 
     # Apply circuit to initial states
-    parameterised_quantum_circuit(
+    parameterized_quantum_circuit(
         torchquantum_device, pqc_parameters.view(-1, pqc_parameters.shape[-1])
     )
 
@@ -178,12 +184,14 @@ class Quixer(torch.nn.Module):
             Degree of quantum singular value transformation polynomial.
           n_ansatz_layers:
             Number of layers of the parameterized quantum circuit ansatz.
-          vocab_size:
+          vocabulary_size:
             Number of tokens in the vocabulary.
           embedding_dimension:
             Size of embedding vector for each token.
           dropout:
             Dropout rate (see https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html).
+          batch_size:
+            Size of the data batches.
           device:
             Torch device the model will be classically simulated on.
         """
@@ -213,7 +221,7 @@ class Quixer(torch.nn.Module):
         # Xavier uniform initialisation helps training
         torch.nn.init.xavier_uniform_(self.embedding.weight)
 
-        # Linear layer converting the embeddings to angles for the parameterised circuit
+        # Linear layer converting the embeddings to angles for the parameterized circuit
         self.embedding_to_angles = torch.nn.Linear(
             in_features=self.embedding_dimension, out_features=self.n_pqc_parameters
         )
@@ -226,11 +234,11 @@ class Quixer(torch.nn.Module):
             n_wires=self.n_qubits, bsz=batch_size
         )
 
-        # TorchQuantum representation of "ansatz 14" parameterised quantum circuit
-        self.token_parameterised_quantum_circuit = tq.GeneralEncoder(
+        # TorchQuantum representation of "ansatz 14" parameterized quantum circuit
+        self.token_parameterized_quantum_circuit = tq.GeneralEncoder(
             ansatz_14_torchquantum_specification(n_qubits, n_ansatz_layers)
         )
-        self.token_parameterised_quantum_circuit.n_wires = self.n_qubits
+        self.token_parameterized_quantum_circuit.n_wires = self.n_qubits
 
         self.n_polynomial_coefficients = self.degree + 1
 
@@ -248,12 +256,12 @@ class Quixer(torch.nn.Module):
             torch.rand(self.n_tokens, dtype=torch.complex64)
         )
 
-        # TorchQuantum representation of "ansatz 14" parameterised quantum circuit
+        # TorchQuantum representation of "ansatz 14" parameterized quantum circuit
         self.quantum_feedforward = tq.GeneralEncoder(
             ansatz_14_torchquantum_specification(n_qubits)
         )
 
-        # TorchQuantum representation of "ansatz 14" parameterised quantum circuit
+        # TorchQuantum representation of "ansatz 14" parameterized quantum circuit
         self.quantum_feedforward_parameters = torch.nn.Parameter(
             torch.rand(self.n_pqc_parameters)
         )
@@ -306,7 +314,7 @@ class Quixer(torch.nn.Module):
         qsvt_lcu_state = apply_qsvt_and_lcu(
             initial_states,
             pqc_angles,
-            self.token_parameterised_quantum_circuit,
+            self.token_parameterized_quantum_circuit,
             self.torchquantum_device,
             self.n_qubits,
             lcu_coefficients,
