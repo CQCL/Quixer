@@ -4,6 +4,7 @@ import time
 import math
 from tqdm import tqdm
 from typing import Any, Optional, Tuple, Callable
+from pathlib import Path
 
 import numpy as np
 
@@ -333,7 +334,9 @@ def train_cycle(
       test_iter: Tensor containing test data returned by `setup_dataset` function.
     """
 
-    checkpoint_fpath = f"./trained_models/q_transformer_lm_{hyperparams['model']}_{hyperparams['seed']}_{int(time.time())}.pt"
+    folder_path = Path("./trained_models")
+    folder_path.mkdir(exist_ok=True, parents=True)
+    checkpoint_fpath = folder_path/f"q_transformer_lm_{hyperparams['model']}_{hyperparams['seed']}_{int(time.time())}.pt"
 
     # Set up optimizer
     optimizer = torch.optim.Adam(
