@@ -55,8 +55,8 @@ def batchify_s2s(
 
     Args:
       data: A 1D torch tensor containing a sequence of token IDs.
-      batch_size: The size each batch should have.
-      window_size: How many tokens are considered in each context window.
+      batch_size: The number of sequences each batch should have.
+      window_size: How many tokens are considered in each context window (each of which is a sequence in the batch).
       pad_token_id: The ID of the pad token, as supplied by the tokenizer.
       device: Torch device the returned tensor is to be created on.
 
@@ -64,10 +64,15 @@ def batchify_s2s(
       Tensor containing data for each batch prepared for a next token prediction language
       modelling task.
     """
-    nr_of_batches = (data.size(0) - 1) // batch_size
+    batch_nr_of_elements = batch_size * window_size
+    nr_of_batches = (data.size(0) - 1) // batch_nr_of_elements
 
     # Discard tokens at the end of the data that do not fill a whole batch
-    batched_data = data[: nr_of_batches * batch_size].view(batch_size, nr_of_batches).T
+    batched_data = (
+        data[: nr_of_batches * batch_nr_of_elements]
+        .view(batch_nr_of_elements, nr_of_batches)
+        .T
+    )
 
     # Data for the first batch
     window_data = torch.cat(
@@ -174,15 +179,9 @@ def setup_dataset(
     PAD_TOKEN = vocab["<pad>"]
 
     # Prepare data for a next-token prediction language modelling task
-    train_iter = batchify_s2s(
-        train_flat, batch_size * window_size, window_size, PAD_TOKEN, device
-    )
-    val_iter = batchify_s2s(
-        val_flat, batch_size * window_size, window_size, PAD_TOKEN, device
-    )
-    test_iter = batchify_s2s(
-        test_flat, batch_size * window_size, window_size, PAD_TOKEN, device
-    )
+    train_iter = batchify_s2s(train_flat, batch_size, window_size, PAD_TOKEN, device)
+    val_iter = batchify_s2s(val_flat, batch_size, window_size, PAD_TOKEN, device)
+    test_iter = batchify_s2s(test_flat, batch_size, window_size, PAD_TOKEN, device)
 
     return vocab, (train_iter, val_iter, test_iter), PAD_TOKEN
 
@@ -336,7 +335,10 @@ def train_cycle(
 
     folder_path = Path("./trained_models")
     folder_path.mkdir(exist_ok=True, parents=True)
-    checkpoint_fpath = folder_path/f"q_transformer_lm_{hyperparams['model']}_{hyperparams['seed']}_{int(time.time())}.pt"
+    checkpoint_fpath = (
+        folder_path
+        / f"q_transformer_lm_{hyperparams['model']}_{hyperparams['seed']}_{int(time.time())}.pt"
+    )
 
     # Set up optimizer
     optimizer = torch.optim.Adam(
