@@ -177,21 +177,21 @@ class Quixer(torch.nn.Module):
         """
         Args:
           n_qubits:
-            Number of qubits per word.
+            Number of qubits that the unitary embeddings of the tokens are defined on.
           n_tokens:
-            Context length i.e. number of tokens processed in one go.
+            Context length / window size.
           qsvt_polynomial_degree:
-            Degree of quantum singular value transformation polynomial.
+            Degree of quantum singular value transformation polynomial (e.g. 2 for a quadratic polynomial, 3 for a cubic polynomial, etc).
           n_ansatz_layers:
-            Number of layers of the parameterized quantum circuit ansatz.
+            Number of layers of the parameterized quantum circuit ansatz used in the unitary embeddings of the tokens.
           vocabulary_size:
             Number of tokens in the vocabulary.
           embedding_dimension:
-            Size of embedding vector for each token.
+            Size of classical embedding vector for each token.
           dropout:
             Dropout rate (see https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html).
           batch_size:
-            Size of the data batches.
+            Size of each batch.
           device:
             Torch device the model will be classically simulated on.
         """
@@ -235,6 +235,7 @@ class Quixer(torch.nn.Module):
         )
 
         # TorchQuantum representation of "ansatz 14" parameterized quantum circuit
+        # uses `n_ansatz_layers` layers
         self.token_parameterized_quantum_circuit = tq.GeneralEncoder(
             ansatz_14_torchquantum_specification(n_qubits, n_ansatz_layers)
         )
@@ -257,11 +258,11 @@ class Quixer(torch.nn.Module):
         )
 
         # TorchQuantum representation of "ansatz 14" parameterized quantum circuit
+        # uses 1 layer
         self.quantum_feedforward = tq.GeneralEncoder(
             ansatz_14_torchquantum_specification(n_qubits)
         )
 
-        # TorchQuantum representation of "ansatz 14" parameterized quantum circuit
         self.quantum_feedforward_parameters = torch.nn.Parameter(
             torch.rand(self.n_pqc_parameters)
         )
@@ -326,7 +327,7 @@ class Quixer(torch.nn.Module):
             torch.nn.functional.normalize(qsvt_lcu_state, dim=-1)
         )
 
-        # Apply a PQC with a separate set of trainable parameters
+        # Apply a PQC at the end with a separate set of trainable parameters
         self.quantum_feedforward(
             self.torchquantum_device,
             self.quantum_feedforward_parameters.repeat(1, batch_size),
